@@ -1,0 +1,16 @@
+Package: energyquant
+Type: Project
+Title: EnergyQuant Market Intelligence Platform
+Version: 0.1.0
+Authors@R: person("Ryan", role = c("aut", "cre"))
+Description: Energy market intelligence and quantitative risk analytics platform.
+Encoding: UTF-8
+Imports:
+    DBI,
+    dotenv,
+    duckdb,
+    httr2,
+    jsonlite,
+    lubridate,
+    testthat,
+    tidyverse
