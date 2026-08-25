@@ -83,19 +83,25 @@ calculate_market_analytics <- function(
         value
       ),
 
-      simple_return = (
-        value / previous_value
-      ) - 1,
-
-      log_return = dplyr::if_else(
+      valid_return_pair =
         value > 0 &
           previous_value > 0,
-        log(
+
+      simple_return = dplyr::if_else(
+        valid_return_pair,
+        (
           value / previous_value
-        ),
+        ) - 1,
         NA_real_
       ),
 
+      log_return = log(
+        dplyr::if_else(
+          valid_return_pair,
+          value / previous_value,
+          NA_real_
+        )
+      ),
       cumulative_return = cumprod(
         1 + dplyr::coalesce(
           simple_return,
@@ -117,6 +123,9 @@ calculate_market_analytics <- function(
       drawdown = (
         value / running_peak
       ) - 1
+    ) |>
+    dplyr::select(
+      -valid_return_pair
     ) |>
     dplyr::ungroup()
 }
