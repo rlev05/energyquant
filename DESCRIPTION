@@ -9,6 +9,7 @@ Imports:
     DBI,
     dotenv,
     duckdb,
+    forecast,
     httr2,
     jsonlite,
     lubridate,
