@@ -11,9 +11,11 @@ source("R/correlation_analytics.R")
 source("R/anomaly_detection.R")
 source("R/regime_detection.R")
 source("R/forecasting.R")
+source("R/data_quality.R")
 source("R/dashboard_data.R")
 source("R/dashboard_analytics.R")
 source("R/dashboard_forecasting.R")
+source("R/dashboard_data_health.R")
 
 config <- load_config()
 
@@ -61,6 +63,15 @@ anomaly_dashboard <-
 regime_dashboard <-
   prepare_regime_dashboard(
     analytics
+  )
+
+data_health_dashboard <-
+  prepare_data_health_dashboard(
+    observations =
+      dashboard_data$observations,
+
+    expected_series =
+      get_market_series()
   )
 
 series_choices <- stats::setNames(
@@ -580,6 +591,91 @@ ui <- bslib::page_navbar(
 
         tableOutput(
           "best_forecast_model"
+        )
+      )
+    )
+  ),
+
+  bslib::nav_panel(
+    "Data Health",
+
+    tags$div(
+      class = "container-fluid pt-4",
+
+      tags$h2(
+        "Data Health & Coverage"
+      ),
+
+      tags$p(
+        paste(
+          "Monitor market coverage, freshness,",
+          "duplicate observations and validation",
+          "status across EnergyQuant data sources."
+        )
+      ),
+
+      fluidRow(
+        column(
+          width = 4,
+
+          bslib::card(
+            bslib::card_header(
+              "Overall status"
+            ),
+
+            tags$h2(
+              textOutput(
+                "data_health_status",
+                inline = TRUE
+              )
+            )
+          )
+        ),
+
+        column(
+          width = 4,
+
+          bslib::card(
+            bslib::card_header(
+              "Duplicate observations"
+            ),
+
+            tags$h2(
+              textOutput(
+                "duplicate_count",
+                inline = TRUE
+              )
+            )
+          )
+        ),
+
+        column(
+          width = 4,
+
+          bslib::card(
+            bslib::card_header(
+              "Invalid observations"
+            ),
+
+            tags$h2(
+              textOutput(
+                "invalid_count",
+                inline = TRUE
+              )
+            )
+          )
+        )
+      ),
+
+      tags$br(),
+
+      bslib::card(
+        bslib::card_header(
+          "Series health"
+        ),
+
+        tableOutput(
+          "data_health_table"
         )
       )
     )
@@ -1236,6 +1332,7 @@ server <- function(
     }
     )
   },
+
     ignoreInit = TRUE
   )
 
@@ -1267,19 +1364,23 @@ server <- function(
     ggplot2::ggplot() +
       ggplot2::geom_line(
         data = actual_data,
+
         ggplot2::aes(
           x = date,
           y = actual
         ),
+
         linewidth = 1
       ) +
       ggplot2::geom_line(
         data = plot_data,
+
         ggplot2::aes(
           x = date,
           y = forecast,
           linetype = model
         ),
+
         linewidth = 0.8
       ) +
       ggplot2::labs(
@@ -1361,6 +1462,77 @@ server <- function(
             "%.1f%%",
             directional_accuracy * 100
           )
+      )
+  },
+
+    striped = TRUE,
+    hover = TRUE
+  )
+
+  output$data_health_status <- renderText(
+  {
+    data_health_dashboard$overall_status
+  }
+  )
+
+  output$duplicate_count <- renderText(
+  {
+    nrow(
+      data_health_dashboard$duplicates
+    )
+  }
+  )
+
+  output$invalid_count <- renderText(
+  {
+    nrow(
+      data_health_dashboard$invalid
+    )
+  }
+  )
+
+  output$data_health_table <- renderTable(
+  {
+    data_health_dashboard$summary |>
+      dplyr::transmute(
+        Market =
+          display_name,
+
+        Source =
+          toupper(
+            source
+          ),
+
+        Rows =
+          rows,
+
+        `First Date` =
+          first_date,
+
+        `Latest Date` =
+          latest_date,
+
+        `Days Since Latest` =
+          days_since_latest,
+
+        Missing =
+          missing_values,
+
+        `Non-Finite` =
+          non_finite_values,
+
+        Duplicates =
+          duplicate_dates,
+
+        Stale =
+          ifelse(
+            stale,
+            "Yes",
+            "No"
+          ),
+
+        Status =
+          status
       )
   },
 
