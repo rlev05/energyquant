@@ -15,6 +15,7 @@ source("R/data_quality.R")
 source("R/dashboard_data.R")
 source("R/dashboard_analytics.R")
 source("R/dashboard_forecasting.R")
+source("R/dashboard_event_studies.R")
 source("R/dashboard_data_health.R")
 
 config <- load_config()
@@ -591,6 +592,92 @@ ui <- bslib::page_navbar(
 
         tableOutput(
           "best_forecast_model"
+        )
+      )
+    )
+  ),
+
+  bslib::nav_panel(
+    "Event Studies",
+
+    tags$div(
+      class = "container-fluid pt-4",
+
+      tags$h2(
+        "Cross-Market Event Studies"
+      ),
+
+      tags$p(
+        paste(
+          "Measure how energy, equity and currency",
+          "markets behave before, during and after",
+          "a selected event date."
+        )
+      ),
+
+      fluidRow(
+        column(
+          width = 3,
+
+          dateInput(
+            inputId = "event_date",
+            label = "Event date",
+            value = as.Date(
+              "2022-02-24"
+            ),
+            min = minimum_date,
+            max = maximum_date
+          ),
+
+          sliderInput(
+            inputId = "event_pre_window",
+            label = "Pre-event observations",
+            min = 1,
+            max = 20,
+            value = 5
+          ),
+
+          sliderInput(
+            inputId = "event_post_window",
+            label = "Post-event observations",
+            min = 1,
+            max = 20,
+            value = 5
+          ),
+
+          selectInput(
+            inputId = "event_market",
+            label = "Market to plot",
+            choices = series_choices,
+            selected = "brent"
+          )
+        ),
+
+        column(
+          width = 9,
+
+          bslib::card(
+            bslib::card_header(
+              "Event-window performance"
+            ),
+
+            plotOutput(
+              "event_study_plot",
+              height = "400px"
+            )
+          )
+        )
+      ),
+
+      tags$br(),
+
+      bslib::card(
+        bslib::card_header(
+          "Cross-market event summary"
+        ),
+
+        tableOutput(
+          "event_study_summary"
         )
       )
     )
@@ -1461,6 +1548,145 @@ server <- function(
           sprintf(
             "%.1f%%",
             directional_accuracy * 100
+          )
+      )
+  },
+
+    striped = TRUE,
+    hover = TRUE
+  )
+
+  event_study_dashboard <- reactive(
+  {
+    req(
+      input$event_date,
+      input$event_pre_window,
+      input$event_post_window
+    )
+
+    prepare_cross_market_event_study(
+      analytics = analytics,
+
+      event_date =
+        input$event_date,
+
+      pre_window =
+        input$event_pre_window,
+
+      post_window =
+        input$event_post_window
+    )
+  }
+  )
+
+  selected_event_study <- reactive(
+  {
+    req(
+      input$event_market,
+      input$event_date,
+      input$event_pre_window,
+      input$event_post_window
+    )
+
+    prepare_single_event_study(
+      analytics = analytics,
+
+      series_key =
+        input$event_market,
+
+      event_date =
+        input$event_date,
+
+      pre_window =
+        input$event_pre_window,
+
+      post_window =
+        input$event_post_window
+    )
+  }
+  )
+
+  output$event_study_plot <- renderPlot(
+  {
+    data <- selected_event_study()
+
+    req(
+      nrow(data) > 0
+    )
+
+    ggplot2::ggplot(
+      data,
+      ggplot2::aes(
+        x = event_day,
+        y =
+          cumulative_event_return *
+            100
+      )
+    ) +
+      ggplot2::geom_hline(
+        yintercept = 0,
+        linetype = "dashed"
+      ) +
+      ggplot2::geom_vline(
+        xintercept = 0,
+        linetype = "dashed"
+      ) +
+      ggplot2::geom_line(
+        linewidth = 0.9
+      ) +
+      ggplot2::geom_point(
+        size = 2
+      ) +
+      ggplot2::labs(
+        x = "Observations relative to event",
+        y = "Cumulative return (%)"
+      ) +
+      ggplot2::theme_minimal(
+        base_size = 13
+      )
+  }
+  )
+
+  output$event_study_summary <- renderTable(
+  {
+    event_study_dashboard()$summary |>
+      dplyr::left_join(
+        market_metadata |>
+          dplyr::select(
+            series_key,
+            display_name
+          ),
+        by = "series_key"
+      ) |>
+      dplyr::transmute(
+        Market =
+          display_name,
+
+        `Market Event Date` =
+          event_date,
+
+        `Pre-Event Return` =
+          sprintf(
+            "%.2f%%",
+            pre_event_return * 100
+          ),
+
+        `Event-Day Return` =
+          sprintf(
+            "%.2f%%",
+            event_day_return * 100
+          ),
+
+        `Post-Event Return` =
+          sprintf(
+            "%.2f%%",
+            post_event_return * 100
+          ),
+
+        `Total Window Return` =
+          sprintf(
+            "%.2f%%",
+            total_window_return * 100
           )
       )
   },
