@@ -7,7 +7,11 @@ source("R/market_series.R")
 source("R/observation_store.R")
 source("R/market_analytics.R")
 source("R/risk_analytics.R")
+source("R/correlation_analytics.R")
+source("R/anomaly_detection.R")
+source("R/regime_detection.R")
 source("R/dashboard_data.R")
+source("R/dashboard_analytics.R")
 
 config <- load_config()
 
@@ -40,6 +44,21 @@ market_snapshot <-
   get_latest_market_snapshot(
     analytics,
     market_metadata
+  )
+
+correlation_matrix <-
+  prepare_correlation_dashboard(
+    analytics
+  )
+
+anomaly_dashboard <-
+  prepare_anomaly_dashboard(
+    analytics
+  )
+
+regime_dashboard <-
+  prepare_regime_dashboard(
+    analytics
   )
 
 series_choices <- stats::setNames(
@@ -76,7 +95,10 @@ ui <- bslib::page_navbar(
       ),
 
       tags$p(
-        "Live market monitoring, quantitative risk analytics and cross-market intelligence."
+        paste(
+          "Live market monitoring, quantitative risk",
+          "analytics and cross-market intelligence."
+        )
       ),
 
       fluidRow(
@@ -151,6 +173,17 @@ ui <- bslib::page_navbar(
 
     tags$div(
       class = "container-fluid pt-4",
+
+      tags$h2(
+        "Market Explorer"
+      ),
+
+      tags$p(
+        paste(
+          "Explore historical prices and rolling",
+          "volatility across EnergyQuant markets."
+        )
+      ),
 
       fluidRow(
         column(
@@ -231,6 +264,226 @@ ui <- bslib::page_navbar(
         )
       )
     )
+  ),
+
+  bslib::nav_panel(
+    "Relationships",
+
+    tags$div(
+      class = "container-fluid pt-4",
+
+      tags$h2(
+        "Cross-Market Relationships"
+      ),
+
+      tags$p(
+        paste(
+          "Analyse full-period and rolling return",
+          "correlations across energy, equity",
+          "and currency markets."
+        )
+      ),
+
+      fluidRow(
+        column(
+          width = 3,
+
+          selectInput(
+            inputId = "correlation_first",
+            label = "First market",
+            choices = series_choices,
+            selected = "brent"
+          ),
+
+          selectInput(
+            inputId = "correlation_second",
+            label = "Second market",
+            choices = series_choices,
+            selected = "wti"
+          ),
+
+          sliderInput(
+            inputId = "correlation_window",
+            label = "Rolling window",
+            min = 20,
+            max = 120,
+            value = 60,
+            step = 10
+          )
+        ),
+
+        column(
+          width = 9,
+
+          bslib::card(
+            bslib::card_header(
+              "Rolling correlation"
+            ),
+
+            plotOutput(
+              "rolling_correlation_plot",
+              height = "380px"
+            )
+          )
+        )
+      ),
+
+      tags$br(),
+
+      bslib::card(
+        bslib::card_header(
+          "Full-period correlation matrix"
+        ),
+
+        tableOutput(
+          "correlation_table"
+        )
+      )
+    )
+  ),
+
+  bslib::nav_panel(
+    "Anomalies",
+
+    tags$div(
+      class = "container-fluid pt-4",
+
+      tags$h2(
+        "Unusual Market Moves"
+      ),
+
+      tags$p(
+        paste(
+          "Rolling z-score detection highlights returns",
+          "that are unusual relative to each market's",
+          "recent historical behaviour."
+        )
+      ),
+
+      bslib::card(
+        bslib::card_header(
+          "Anomaly summary"
+        ),
+
+        tableOutput(
+          "anomaly_summary"
+        )
+      ),
+
+      tags$br(),
+
+      fluidRow(
+        column(
+          width = 3,
+
+          selectInput(
+            inputId = "anomaly_market",
+            label = "Market",
+            choices = series_choices,
+            selected = "brent"
+          )
+        ),
+
+        column(
+          width = 9,
+
+          bslib::card(
+            bslib::card_header(
+              "Return anomaly history"
+            ),
+
+            plotOutput(
+              "anomaly_plot",
+              height = "380px"
+            )
+          )
+        )
+      ),
+
+      tags$br(),
+
+      bslib::card(
+        bslib::card_header(
+          "Most recent anomalies"
+        ),
+
+        tableOutput(
+          "recent_anomalies"
+        )
+      )
+    )
+  ),
+
+  bslib::nav_panel(
+    "Regimes",
+
+    tags$div(
+      class = "container-fluid pt-4",
+
+      tags$h2(
+        "Market Volatility Regimes"
+      ),
+
+      tags$p(
+        paste(
+          "Classify markets into low, normal and",
+          "high-volatility environments using",
+          "historical rolling thresholds."
+        )
+      ),
+
+      bslib::card(
+        bslib::card_header(
+          "Current market regimes"
+        ),
+
+        tableOutput(
+          "current_regimes"
+        )
+      ),
+
+      tags$br(),
+
+      fluidRow(
+        column(
+          width = 3,
+
+          selectInput(
+            inputId = "regime_market",
+            label = "Market",
+            choices = series_choices,
+            selected = "brent"
+          )
+        ),
+
+        column(
+          width = 9,
+
+          bslib::card(
+            bslib::card_header(
+              "Volatility regime history"
+            ),
+
+            plotOutput(
+              "regime_plot",
+              height = "400px"
+            )
+          )
+        )
+      ),
+
+      tags$br(),
+
+      bslib::card(
+        bslib::card_header(
+          "Recent regime transitions"
+        ),
+
+        tableOutput(
+          "regime_transitions"
+        )
+      )
+    )
   )
 )
 
@@ -298,8 +551,7 @@ server <- function(
             NA_character_,
             sprintf(
               "%.2f%%",
-              rolling_volatility *
-                100
+              rolling_volatility * 100
             )
           )
       )
@@ -376,8 +628,7 @@ server <- function(
         data,
         ggplot2::aes(
           x = date,
-          y = rolling_volatility *
-            100
+          y = rolling_volatility * 100
         )
       ) +
         ggplot2::geom_line(
@@ -402,36 +653,31 @@ server <- function(
         `Annualised Return` =
           sprintf(
             "%.2f%%",
-            annualised_return *
-              100
+            annualised_return * 100
           ),
 
         `Annualised Volatility` =
           sprintf(
             "%.2f%%",
-            annualised_volatility *
-              100
+            annualised_volatility * 100
           ),
 
         `VaR 95%` =
           sprintf(
             "%.2f%%",
-            value_at_risk *
-              100
+            value_at_risk * 100
           ),
 
         `Expected Shortfall 95%` =
           sprintf(
             "%.2f%%",
-            expected_shortfall *
-              100
+            expected_shortfall * 100
           ),
 
         `Maximum Drawdown` =
           sprintf(
             "%.2f%%",
-            maximum_drawdown *
-              100
+            maximum_drawdown * 100
           ),
 
         Sharpe = round(
@@ -448,6 +694,401 @@ server <- function(
           calmar_ratio,
           2
         )
+      )
+  },
+
+    striped = TRUE,
+    hover = TRUE
+  )
+
+  output$correlation_table <- renderTable(
+  {
+    matrix_data <- round(
+      correlation_matrix,
+      3
+    )
+
+    data.frame(
+      Market = rownames(
+        matrix_data
+      ),
+      matrix_data,
+      row.names = NULL,
+      check.names = FALSE
+    )
+  },
+
+    striped = TRUE,
+    hover = TRUE
+  )
+
+  selected_correlation_data <- reactive(
+  {
+    req(
+      input$correlation_first,
+      input$correlation_second,
+      input$correlation_window
+    )
+
+    validate(
+      need(
+        input$correlation_first !=
+          input$correlation_second,
+        "Choose two different markets."
+      )
+    )
+
+    calculate_rolling_correlation(
+      analytics = analytics,
+
+      first_series =
+        input$correlation_first,
+
+      second_series =
+        input$correlation_second,
+
+      window =
+        input$correlation_window
+    ) |>
+      dplyr::filter(
+        is.finite(
+          correlation
+        )
+      )
+  }
+  )
+
+  output$rolling_correlation_plot <-
+    renderPlot(
+    {
+      data <- selected_correlation_data()
+
+      req(
+        nrow(data) > 0
+      )
+
+      ggplot2::ggplot(
+        data,
+        ggplot2::aes(
+          x = date,
+          y = correlation
+        )
+      ) +
+        ggplot2::geom_hline(
+          yintercept = 0,
+          linetype = "dashed"
+        ) +
+        ggplot2::geom_line(
+          linewidth = 0.8
+        ) +
+        ggplot2::coord_cartesian(
+          ylim = c(
+            -1,
+            1
+          )
+        ) +
+        ggplot2::labs(
+          x = NULL,
+          y = "Correlation"
+        ) +
+        ggplot2::theme_minimal(
+          base_size = 13
+        )
+    }
+    )
+
+  output$anomaly_summary <- renderTable(
+  {
+    anomaly_dashboard$summary |>
+      dplyr::left_join(
+        market_metadata |>
+          dplyr::select(
+            series_key,
+            display_name
+          ),
+        by = "series_key"
+      ) |>
+      dplyr::transmute(
+        Market = display_name,
+
+        Observations =
+          observations,
+
+        Anomalies =
+          anomalies,
+
+        Positive =
+          positive_anomalies,
+
+        Negative =
+          negative_anomalies,
+
+        `Anomaly Rate` =
+          sprintf(
+            "%.2f%%",
+            anomaly_rate * 100
+          ),
+
+        `Largest |Z|` =
+          round(
+            largest_absolute_z,
+            2
+          ),
+
+        `Latest Anomaly` =
+          latest_anomaly_date
+      )
+  },
+
+    striped = TRUE,
+    hover = TRUE
+  )
+
+  selected_anomaly_data <- reactive(
+  {
+    req(
+      input$anomaly_market
+    )
+
+    anomaly_dashboard$results |>
+      dplyr::filter(
+        series_key ==
+          input$anomaly_market,
+
+        !is.na(
+          simple_return
+        )
+      )
+  }
+  )
+
+  output$anomaly_plot <- renderPlot(
+  {
+    data <- selected_anomaly_data()
+
+    req(
+      nrow(data) > 0
+    )
+
+    ggplot2::ggplot(
+      data,
+      ggplot2::aes(
+        x = date,
+        y = simple_return * 100
+      )
+    ) +
+      ggplot2::geom_hline(
+        yintercept = 0,
+        linetype = "dashed"
+      ) +
+      ggplot2::geom_line(
+        linewidth = 0.6
+      ) +
+      ggplot2::geom_point(
+        data = data |>
+          dplyr::filter(
+            is_anomaly
+          ),
+        size = 2.5
+      ) +
+      ggplot2::labs(
+        x = NULL,
+        y = "Daily return (%)"
+      ) +
+      ggplot2::theme_minimal(
+        base_size = 13
+      )
+  }
+  )
+
+  output$recent_anomalies <- renderTable(
+  {
+    anomaly_dashboard$results |>
+      dplyr::filter(
+        is_anomaly
+      ) |>
+      dplyr::left_join(
+        market_metadata |>
+          dplyr::select(
+            series_key,
+            display_name
+          ),
+        by = "series_key"
+      ) |>
+      dplyr::arrange(
+        dplyr::desc(
+          date
+        )
+      ) |>
+      dplyr::slice_head(
+        n = 15
+      ) |>
+      dplyr::transmute(
+        Market = display_name,
+
+        Date = date,
+
+        Return =
+          sprintf(
+            "%.2f%%",
+            simple_return * 100
+          ),
+
+        `Z Score` =
+          round(
+            anomaly_z_score,
+            2
+          ),
+
+        Direction =
+          anomaly_direction
+      )
+  },
+
+    striped = TRUE,
+    hover = TRUE
+  )
+
+  output$current_regimes <- renderTable(
+  {
+    regime_dashboard$current |>
+      dplyr::left_join(
+        market_metadata |>
+          dplyr::select(
+            series_key,
+            display_name
+          ),
+        by = "series_key"
+      ) |>
+      dplyr::transmute(
+        Market = display_name,
+
+        Date = date,
+
+        Regime = regime,
+
+        `Current Volatility` =
+          sprintf(
+            "%.2f%%",
+            rolling_volatility * 100
+          ),
+
+        `Low Threshold` =
+          sprintf(
+            "%.2f%%",
+            regime_lower_threshold * 100
+          ),
+
+        `High Threshold` =
+          sprintf(
+            "%.2f%%",
+            regime_upper_threshold * 100
+          )
+      )
+  },
+
+    striped = TRUE,
+    hover = TRUE
+  )
+
+  selected_regime_data <- reactive(
+  {
+    req(
+      input$regime_market
+    )
+
+    regime_dashboard$results |>
+      dplyr::filter(
+        series_key ==
+          input$regime_market,
+
+        !is.na(
+          regime
+        )
+      )
+  }
+  )
+
+  output$regime_plot <- renderPlot(
+  {
+    data <- selected_regime_data()
+
+    req(
+      nrow(data) > 0
+    )
+
+    ggplot2::ggplot(
+      data,
+      ggplot2::aes(
+        x = date
+      )
+    ) +
+      ggplot2::geom_line(
+        ggplot2::aes(
+          y =
+            rolling_volatility * 100
+        ),
+        linewidth = 0.8
+      ) +
+      ggplot2::geom_line(
+        ggplot2::aes(
+          y =
+            regime_lower_threshold * 100
+        ),
+        linetype = "dashed"
+      ) +
+      ggplot2::geom_line(
+        ggplot2::aes(
+          y =
+            regime_upper_threshold * 100
+        ),
+        linetype = "dashed"
+      ) +
+      ggplot2::labs(
+        x = NULL,
+        y = "Annualised volatility (%)"
+      ) +
+      ggplot2::theme_minimal(
+        base_size = 13
+      )
+  }
+  )
+
+  output$regime_transitions <- renderTable(
+  {
+    regime_dashboard$transitions |>
+      dplyr::left_join(
+        market_metadata |>
+          dplyr::select(
+            series_key,
+            display_name
+          ),
+        by = "series_key"
+      ) |>
+      dplyr::arrange(
+        dplyr::desc(
+          date
+        )
+      ) |>
+      dplyr::slice_head(
+        n = 15
+      ) |>
+      dplyr::transmute(
+        Market = display_name,
+
+        Date = date,
+
+        From =
+          previous_regime,
+
+        To =
+          regime,
+
+        Volatility =
+          sprintf(
+            "%.2f%%",
+            rolling_volatility * 100
+          )
       )
   },
 
