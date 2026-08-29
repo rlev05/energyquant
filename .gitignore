@@ -11,6 +11,8 @@
 
 data/raw/*
 data/processed/*
+!data/deployment/
+!data/deployment/market_observations.rds
 !data/raw/.gitkeep
 !data/processed/.gitkeep
 

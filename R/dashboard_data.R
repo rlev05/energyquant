@@ -1,7 +1,53 @@
-prepare_dashboard_data <- function(
-  connection
+load_dashboard_observations <- function(
+  connection = NULL,
+  deployment_snapshot =
+    "data/deployment/market_observations.rds"
 ) {
-  observations <- get_observations(
+  if (!is.null(connection)) {
+    database_data <- tryCatch(
+      get_observations(
+        connection
+      ),
+      error = function(error) {
+        NULL
+      }
+    )
+
+    if (
+      !is.null(database_data) &&
+        nrow(database_data) > 0
+    ) {
+      return(
+        database_data
+      )
+    }
+  }
+
+  if (
+    file.exists(
+      deployment_snapshot
+    )
+  ) {
+    return(
+      readRDS(
+        deployment_snapshot
+      )
+    )
+  }
+
+  stop(
+    paste(
+      "No EnergyQuant market data are available.",
+      "Create the local DuckDB database or generate",
+      "data/deployment/market_observations.rds."
+    )
+  )
+}
+
+prepare_dashboard_data <- function(
+  connection = NULL
+) {
+  observations <- load_dashboard_observations(
     connection
   )
 

@@ -20,17 +20,24 @@ source("R/dashboard_data_health.R")
 
 config <- load_config()
 
-connection <- connect_database(
-  config$database_path
-)
-
-onStop(
-  function() {
-    disconnect_database(
-      connection
-    )
+connection <- tryCatch(
+  connect_database(
+    config$database_path
+  ),
+  error = function(error) {
+    NULL
   }
 )
+
+if (!is.null(connection)) {
+  onStop(
+    function() {
+      disconnect_database(
+        connection
+      )
+    }
+  )
+}
 
 dashboard_data <- prepare_dashboard_data(
   connection
