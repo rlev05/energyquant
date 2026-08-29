@@ -10,8 +10,10 @@ source("R/risk_analytics.R")
 source("R/correlation_analytics.R")
 source("R/anomaly_detection.R")
 source("R/regime_detection.R")
+source("R/forecasting.R")
 source("R/dashboard_data.R")
 source("R/dashboard_analytics.R")
+source("R/dashboard_forecasting.R")
 
 config <- load_config()
 
@@ -481,6 +483,103 @@ ui <- bslib::page_navbar(
 
         tableOutput(
           "regime_transitions"
+        )
+      )
+    )
+  ),
+
+  bslib::nav_panel(
+    "Forecasting",
+
+    tags$div(
+      class = "container-fluid pt-4",
+
+      tags$h2(
+        "Forecasting & Backtesting"
+      ),
+
+      tags$p(
+        paste(
+          "Compare naive, ARIMA and ETS models using",
+          "rolling out-of-sample forecasts rather than",
+          "in-sample model fit."
+        )
+      ),
+
+      fluidRow(
+        column(
+          width = 3,
+
+          selectInput(
+            inputId = "forecast_market",
+            label = "Market",
+            choices = series_choices,
+            selected = "brent"
+          ),
+
+          sliderInput(
+            inputId = "forecast_points",
+            label = "Backtest observations",
+            min = 10,
+            max = 60,
+            value = 30,
+            step = 10
+          ),
+
+          actionButton(
+            inputId = "run_forecast",
+            label = "Run backtest",
+            class = "btn-primary"
+          ),
+
+          tags$br(),
+          tags$br(),
+
+          tags$p(
+            paste(
+              "ARIMA and ETS are refitted at each step,",
+              "so the analysis may take a short while."
+            )
+          )
+        ),
+
+        column(
+          width = 9,
+
+          bslib::card(
+            bslib::card_header(
+              "Out-of-sample forecasts"
+            ),
+
+            plotOutput(
+              "forecast_plot",
+              height = "400px"
+            )
+          )
+        )
+      ),
+
+      tags$br(),
+
+      bslib::card(
+        bslib::card_header(
+          "Model performance"
+        ),
+
+        tableOutput(
+          "forecast_performance"
+        )
+      ),
+
+      tags$br(),
+
+      bslib::card(
+        bslib::card_header(
+          "Best model"
+        ),
+
+        tableOutput(
+          "best_forecast_model"
         )
       )
     )
@@ -1088,6 +1187,179 @@ server <- function(
           sprintf(
             "%.2f%%",
             rolling_volatility * 100
+          )
+      )
+  },
+
+    striped = TRUE,
+    hover = TRUE
+  )
+
+  forecast_dashboard <- eventReactive(
+    input$run_forecast,
+  {
+    req(
+      input$forecast_market,
+      input$forecast_points
+    )
+
+    withProgress(
+      message = "Running forecast backtest",
+      value = 0,
+    {
+      incProgress(
+        0.2,
+        detail = "Preparing market history..."
+      )
+
+      result <- run_dashboard_backtest(
+        observations =
+          dashboard_data$observations,
+
+        series_key =
+          input$forecast_market,
+
+        evaluation_points =
+          input$forecast_points,
+
+        training_window = 500,
+
+        minimum_training = 120
+      )
+
+      incProgress(
+        0.8,
+        detail = "Comparing models..."
+      )
+
+      result
+    }
+    )
+  },
+    ignoreInit = TRUE
+  )
+
+  output$forecast_plot <- renderPlot(
+  {
+    forecast_data <-
+      forecast_dashboard()$results
+
+    req(
+      nrow(
+        forecast_data
+      ) > 0
+    )
+
+    plot_data <- forecast_data |>
+      dplyr::select(
+        date,
+        model,
+        actual,
+        forecast
+      )
+
+    actual_data <- plot_data |>
+      dplyr::distinct(
+        date,
+        actual
+      )
+
+    ggplot2::ggplot() +
+      ggplot2::geom_line(
+        data = actual_data,
+        ggplot2::aes(
+          x = date,
+          y = actual
+        ),
+        linewidth = 1
+      ) +
+      ggplot2::geom_line(
+        data = plot_data,
+        ggplot2::aes(
+          x = date,
+          y = forecast,
+          linetype = model
+        ),
+        linewidth = 0.8
+      ) +
+      ggplot2::labs(
+        x = NULL,
+        y = "Market value",
+        linetype = "Model"
+      ) +
+      ggplot2::theme_minimal(
+        base_size = 13
+      )
+  }
+  )
+
+  output$forecast_performance <- renderTable(
+  {
+    forecast_dashboard()$performance |>
+      dplyr::arrange(
+        rmse
+      ) |>
+      dplyr::transmute(
+        Model = model,
+
+        Forecasts =
+          forecasts,
+
+        MAE = round(
+          mae,
+          3
+        ),
+
+        RMSE = round(
+          rmse,
+          3
+        ),
+
+        sMAPE = sprintf(
+          "%.2f%%",
+          smape * 100
+        ),
+
+        Bias = round(
+          bias,
+          3
+        ),
+
+        `Directional Accuracy` =
+          sprintf(
+            "%.1f%%",
+            directional_accuracy * 100
+          ),
+
+        `RMSE Rank` =
+          rmse_rank
+      )
+  },
+
+    striped = TRUE,
+    hover = TRUE
+  )
+
+  output$best_forecast_model <- renderTable(
+  {
+    forecast_dashboard()$best_model |>
+      dplyr::transmute(
+        Model = model,
+
+        RMSE = round(
+          rmse,
+          3
+        ),
+
+        MAE = round(
+          mae,
+          3
+        ),
+
+        `Directional Accuracy` =
+          sprintf(
+            "%.1f%%",
+            directional_accuracy * 100
           )
       )
   },
