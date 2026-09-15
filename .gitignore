@@ -21,3 +21,5 @@ data/processed/*
 
 renv/library/
 renv/staging/
+# Local deployment metadata
+rsconnect/
