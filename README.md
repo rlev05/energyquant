@@ -2,6 +2,8 @@
 
 [![R Tests](https://github.com/rlev05/energyquant/actions/workflows/r-tests.yml/badge.svg)](https://github.com/rlev05/energyquant/actions/workflows/r-tests.yml)
 
+**Live dashboard:** [Open EnergyQuant](https://ryanlevitt05.shinyapps.io/energyquant/)
+
 EnergyQuant is an R project I built to explore energy markets and practise building a larger data project from start to finish.
 
 I wanted to do something beyond a normal analysis notebook, so the project gradually grew into a small market analytics platform. It collects data from APIs, stores it in DuckDB, runs different types of quantitative analysis and then displays the results through a Shiny dashboard.
